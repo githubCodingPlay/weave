@@ -1,40 +1,68 @@
 package common
 
 import (
-	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
 
+	"github.com/weaveworks/mesh"
+	"github.com/weaveworks/weave/db"
 	weavenet "github.com/weaveworks/weave/net"
 )
 
+func getOldStyleSystemUUID(hostRoot string) ([]byte, error) {
+	uuid, err := ioutil.ReadFile(hostRoot + "/sys/class/dmi/id/product_uuid")
+	if os.IsNotExist(err) {
+		uuid, err = ioutil.ReadFile(hostRoot + "/sys/hypervisor/uuid")
+	}
+	return uuid, err
+}
+
 func getSystemUUID(hostRoot string) ([]byte, error) {
+	uuid, err := getOldStyleSystemUUID(hostRoot)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
 	machineid, err := ioutil.ReadFile(hostRoot + "/etc/machine-id")
 	if os.IsNotExist(err) {
 		machineid, _ = ioutil.ReadFile(hostRoot + "/var/lib/dbus/machine-id")
 	}
-	uuid, err := ioutil.ReadFile(hostRoot + "/sys/class/dmi/id/product_uuid")
-	if os.IsNotExist(err) {
-		uuid, _ = ioutil.ReadFile(hostRoot + "/sys/hypervisor/uuid")
-	}
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
-	if len(machineid)+len(uuid) == 0 {
-		return nil, fmt.Errorf("Empty system uuid")
-	}
 	return append(machineid, uuid...), nil
+}
+
+func getPersistedPeerName(dbPrefix string) mesh.PeerName {
+	d, err := db.NewBoltDBReadOnly(dbPrefix + "data.db")
+	if err != nil {
+		return mesh.UnknownPeerName
+	}
+	defer d.Close()
+	var peerName mesh.PeerName
+	nameFound, err := d.Load(db.NameIdent, &peerName)
+	if err != nil || !nameFound {
+		return mesh.UnknownPeerName
+	}
+	return peerName
 }
 
 // GetSystemPeerName returns an ID derived from concatenated machine-id
 // (either systemd or dbus), the system (aka bios) UUID and the
 // hypervisor UUID.  It is tweaked and formatted to be usable as a mac address
-func GetSystemPeerName(hostRoot string) (string, error) {
+func GetSystemPeerName(dbPrefix, hostRoot string) (string, error) {
+	// Check if we have a persisted name that matches the old-style ID for this host
+	if oldUUID, err := getOldStyleSystemUUID(hostRoot); err == nil {
+		persistedPeerName := getPersistedPeerName(dbPrefix)
+		if persistedPeerName == mesh.PeerNameFromBin(weavenet.PersistentMAC(oldUUID)) {
+			return persistedPeerName.String(), nil
+		}
+	}
 	var mac net.HardwareAddr
-	if uuid, err := getSystemUUID(hostRoot); err == nil {
+	if uuid, err := getSystemUUID(hostRoot); err == nil && len(uuid) > 0 {
 		mac = weavenet.PersistentMAC(uuid)
 	} else {
+		// It's a bit worrying that we silently drop any error from getSystemUUID
 		mac, err = weavenet.RandomMAC()
 		if err != nil {
 			return "", err

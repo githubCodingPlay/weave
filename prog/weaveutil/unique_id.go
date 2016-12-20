@@ -7,10 +7,12 @@ import (
 )
 
 func uniqueID(args []string) error {
-	if len(args) > 0 {
-		cmdUsage("unique-id", "")
+	if len(args) != 2 {
+		cmdUsage("unique-id", "<db-prefix> <host-root>")
 	}
-	uid, err := common.GetSystemPeerName("")
+	dbPrefix := args[0]
+	hostRoot := args[1]
+	uid, err := common.GetSystemPeerName(dbPrefix, hostRoot)
 	if err != nil {
 		return err
 	}
