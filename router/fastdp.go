@@ -616,14 +616,14 @@ func (fastdp fastDatapathOverlay) PrepareConnection(params mesh.OverlayConnectio
 		return nil, err
 	}
 
-	if fastdp.ipsec != nil && params.LocalSAKey != nil && params.RemoteSAKey != nil {
+	if fastdp.ipsec != nil && params.SessionKey != nil {
 		var err error
 		log.Info("setting up IPsec between ", fastdp.localPeer, " and ", params.RemotePeer)
 		spi, err = fastdp.ipsec.Protect(
 			fastdp.localPeer.ShortID, params.RemotePeer.ShortID,
 			params.LocalAddr.IP, remoteAddr.IP,
 			vxlanUDPPort,
-			params.LocalSAKey, params.RemoteSAKey,
+			params.SessionKey,
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "ipsec setup connection")

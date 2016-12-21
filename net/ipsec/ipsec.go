@@ -44,8 +44,10 @@ package ipsec
 // * Rotate keys.
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"sync"
@@ -54,6 +56,7 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/crypto/hkdf"
 
 	"github.com/weaveworks/mesh"
 )
@@ -62,6 +65,8 @@ type SPI uint32
 
 const (
 	mask = SPI(2)<<(mesh.PeerShortIDBits-1) - 1
+
+	keySize = 36 // AES-GCM key 32 bytes + 4 bytes salt
 
 	mark    = uint32(0x1) << 17
 	markStr = "0x20000/0x20000"
@@ -94,7 +99,7 @@ func New() (*IPSec, error) {
 }
 
 // Protect establishes IPsec between given peers.
-func (ipsec *IPSec) Protect(srcPeer, dstPeer mesh.PeerShortID, srcIP, dstIP net.IP, dstPort int, localKey, remoteKey []byte) (SPI, error) {
+func (ipsec *IPSec) Protect(srcPeer, dstPeer mesh.PeerShortID, srcIP, dstIP net.IP, dstPort int, masterKey *[32]byte) (SPI, error) {
 	outSPI, err := newSPI(srcPeer, dstPeer)
 	if err != nil {
 		return 0,
@@ -110,6 +115,14 @@ func (ipsec *IPSec) Protect(srcPeer, dstPeer mesh.PeerShortID, srcIP, dstIP net.
 	if err != nil {
 		return 0,
 			errors.Wrap(err, fmt.Sprintf("derive SPI (%x, %x)", dstPeer, srcPeer))
+	}
+
+	localKey, remoteKey, err := deriveKeys(masterKey[:])
+	if err != nil {
+		return 0, errors.Wrap(err, "derive keys")
+	}
+	if srcPeer > dstPeer {
+		localKey, remoteKey = remoteKey, localKey
 	}
 
 	ipsec.Lock()
@@ -337,8 +350,8 @@ func (ipsec *IPSec) resetIPTables(destroy bool) error {
 // xfrm
 
 func xfrmState(srcIP, dstIP net.IP, spi SPI, key []byte) (*netlink.XfrmState, error) {
-	if len(key) != 36 {
-		return nil, fmt.Errorf("key should be 36 bytes long")
+	if len(key) != keySize {
+		return nil, fmt.Errorf("key should be %d bytes long", keySize)
 	}
 
 	return &netlink.XfrmState{
@@ -399,4 +412,19 @@ func connRefKey(srcIP, dstIP net.IP, spi SPI) (key [12]byte) {
 	binary.BigEndian.PutUint32(key[8:], uint32(spi))
 
 	return
+}
+
+func deriveKeys(masterKey []byte) ([]byte, []byte, error) {
+	keys := make([]byte, 2*keySize)
+	hkdf := hkdf.New(sha256.New, masterKey, nil, nil)
+
+	n, err := io.ReadFull(hkdf, keys)
+	if err != nil {
+		return nil, nil, err
+	}
+	if n != 2*keySize {
+		return nil, nil, fmt.Errorf("derived too short key: %d", n)
+	}
+
+	return keys[:keySize], keys[keySize:], nil
 }
