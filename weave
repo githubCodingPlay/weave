@@ -137,8 +137,12 @@ docker_run_options() {
 
 exec_options() {
     case "$1" in
-        setup|setup-cni|launch|launch-router)
-            echo -v /:/host -e HOST_ROOT=/host
+        setup|setup-cni)
+            echo -v /etc:/host/etc -v /opt:/host/opt -e HOST_ROOT=/host
+            ;;
+        # All the commands that may create the bridge
+        launch|launch-router|create-bridge|attach-router|run|start|attach|restart|expose|hide)
+            echo -v /etc:/host/etc -v /var/lib/dbus:/host/var/lib/dbus -e HOST_ROOT=/host
             ;;
     esac
 }
