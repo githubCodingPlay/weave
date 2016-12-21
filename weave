@@ -714,8 +714,9 @@ init_bridge_prep() {
 
     ip link add name $BRIDGE type bridge
 
-    WEAVEDB_PATH=$(docker inspect -f '{{with index .Mounts 0}}{{.Source}}{{end}}' $DB_CONTAINER_NAME)
-    MAC=$(util_op unique-id "$WEAVEDB_PATH" "$HOST_ROOT")
+    # for Docker 1.12 this needs to be docker inspect -f '{{with index .Mounts 0}}{{.Source}}{{end}}'
+    WEAVEDB_PATH=$(docker inspect -f '{{index .Volumes "/weavedb"}}' $DB_CONTAINER_NAME 2>/dev/null)
+    MAC=$(util_op unique-id "$HOST_ROOT/$WEAVEDB_PATH/weave" "$HOST_ROOT")
 
     ip link set dev $BRIDGE address $MAC
 
