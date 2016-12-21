@@ -29,6 +29,7 @@ if [ "${EXPECT_NPC}" = "0" ]; then
     WEAVE_NPC_OPTS=""
 fi
 
+export HOST_ROOT=/host
 /home/weave/weave --local create-bridge --force $WEAVE_NPC_OPTS
 
 # Kubernetes sets HOSTNAME to the host's hostname
@@ -110,7 +111,7 @@ else
     echo "Failed to install the Weave CNI plugin" >&2
     exit 1
 fi
-export WEAVE_CNI_CONFIG_DIR=/host_etc/cni/net.d
+export WEAVE_CNI_CONFIG_DIR=/host/etc/cni/net.d
 mkdir -p $WEAVE_CNI_CONFIG_DIR
 /home/weave/weave --local setup-cni
 
