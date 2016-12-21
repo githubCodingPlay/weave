@@ -43,7 +43,7 @@ spec:
             - name: cni-bin2
               mountPath: /host_home
             - name: cni-conf
-              mountPath: /etc
+              mountPath: /host_etc
           resources:
             requests:
               cpu: 10m

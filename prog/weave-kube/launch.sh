@@ -110,7 +110,8 @@ else
     echo "Failed to install the Weave CNI plugin" >&2
     exit 1
 fi
-mkdir -p /etc/cni/net.d
+export WEAVE_CNI_CONFIG_DIR=/host_etc/cni/net.d
+mkdir -p $WEAVE_CNI_CONFIG_DIR
 /home/weave/weave --local setup-cni
 
 # Expose the weave network so host processes can communicate with pods
