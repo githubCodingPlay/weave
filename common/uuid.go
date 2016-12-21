@@ -10,16 +10,16 @@ import (
 	weavenet "github.com/weaveworks/weave/net"
 )
 
-func getOldStyleSystemUUID(hostRoot string) ([]byte, error) {
-	uuid, err := ioutil.ReadFile(hostRoot + "/sys/class/dmi/id/product_uuid")
+func getOldStyleSystemUUID() ([]byte, error) {
+	uuid, err := ioutil.ReadFile("/sys/class/dmi/id/product_uuid")
 	if os.IsNotExist(err) {
-		uuid, err = ioutil.ReadFile(hostRoot + "/sys/hypervisor/uuid")
+		uuid, err = ioutil.ReadFile("/sys/hypervisor/uuid")
 	}
 	return uuid, err
 }
 
 func getSystemUUID(hostRoot string) ([]byte, error) {
-	uuid, err := getOldStyleSystemUUID(hostRoot)
+	uuid, err := getOldStyleSystemUUID()
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func getPersistedPeerName(dbPrefix string) mesh.PeerName {
 // hypervisor UUID.  It is tweaked and formatted to be usable as a mac address
 func GetSystemPeerName(dbPrefix, hostRoot string) (string, error) {
 	// Check if we have a persisted name that matches the old-style ID for this host
-	if oldUUID, err := getOldStyleSystemUUID(hostRoot); err == nil {
+	if oldUUID, err := getOldStyleSystemUUID(); err == nil {
 		persistedPeerName := getPersistedPeerName(dbPrefix)
 		if persistedPeerName == mesh.PeerNameFromBin(weavenet.PersistentMAC(oldUUID)) {
 			return persistedPeerName.String(), nil
